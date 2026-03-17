@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Y Board Editor</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="page study-page-wide y-page">
+      <header class="hero">
+        <a class="site-mark" href="./index.html">Hex Study</a>
+        <span class="header-sep" aria-hidden="true">/</span>
+        <h1>Y Board Editor</h1>
+      </header>
+
+      <section class="layout study-layout-wide">
+        <section class="board-panel">
+          <div class="board-topbar">
+            <p id="y-status" class="turn-indicator">Turn: Red</p>
+            <div class="board-controls">
+              <button id="reset-btn" class="board-reset" type="button">Reset</button>
+            </div>
+          </div>
+          <svg id="board" class="board study-board-wide y-board" aria-label="Y board editor"></svg>
+        </section>
+
+        <section class="detail-panel study-detail-panel-wide">
+          <div class="detail-section">
+            <div class="detail-inline-row">
+              <h2>Size</h2>
+              <div id="size-stepper" class="board-size-stepper" role="group" aria-label="Board size">
+                <button id="size-prev-btn" class="study-nav-btn" type="button" aria-label="Smaller board">−</button>
+                <input id="size-input" class="board-size-input" type="text" inputmode="numeric" pattern="[0-9]*" value="15" aria-label="Board size">
+                <button id="size-next-btn" class="study-nav-btn" type="button" aria-label="Larger board">+</button>
+              </div>
+            </div>
+            <div class="detail-inline-row">
+              <h2>Moves</h2>
+              <div class="mode-toggle" role="group" aria-label="Moves">
+                <button id="move-numbers-off-btn" class="mode-btn mode-btn-compact is-active" type="button" aria-pressed="true">Off</button>
+                <button id="move-numbers-on-btn" class="mode-btn mode-btn-compact" type="button" aria-pressed="false">On</button>
+              </div>
+            </div>
+            <div class="detail-inline-row">
+              <h2>Orientation</h2>
+              <div class="mode-toggle" role="group" aria-label="Board orientation">
+                <button id="orientation-flat-btn" class="mode-btn mode-btn-compact is-active" type="button" aria-pressed="true">Flat</button>
+                <button id="orientation-diamond-btn" class="mode-btn mode-btn-compact" type="button" aria-pressed="false">Diamond</button>
+              </div>
+            </div>
+            <div class="detail-inline-row canonical-row">
+              <h2>Line</h2>
+              <div class="line-load-row">
+                <input id="current-line" class="line-input" type="text" spellcheck="false" autocomplete="off" autocapitalize="none" value="15," aria-label="Line">
+                <button id="line-load-btn" class="line-load-btn" type="button">Load</button>
+              </div>
+            </div>
+            <div class="move-list-nav-stack">
+              <div id="move-list" class="move-list" aria-label="Move list"></div>
+              <div id="move-nav" class="study-nav" role="group" aria-label="Move navigation">
+                <div class="study-nav-group">
+                  <button id="move-first-btn" class="study-nav-btn" type="button" aria-label="Start">|&lt;</button>
+                  <button id="move-prev-btn" class="study-nav-btn" type="button" aria-label="Previous move">&lt;</button>
+                  <button id="move-next-btn" class="study-nav-btn" type="button" aria-label="Next move">&gt;</button>
+                  <button id="move-last-btn" class="study-nav-btn" type="button" aria-label="End">&gt;|</button>
+                </div>
+                <div class="study-nav-group study-nav-secondary-group">
+                  <button id="move-undo-btn" class="study-nav-btn" type="button" aria-label="Undo edit" title="Undo edit">↶</button>
+                  <button id="move-redo-btn" class="study-nav-btn" type="button" aria-label="Redo edit" title="Redo edit">↷</button>
+                  <button id="move-delete-btn" class="study-nav-btn" type="button" aria-label="Delete tail" title="Delete tail">×</button>
+                </div>
+              </div>
+            </div>
+            <p id="export-svg-link" class="meta-copy"><a href="#">Download SVG</a></p>
+            <p id="shortcut-hint" class="meta-copy shortcut-hint">Shortcuts: <kbd>p</kbd> previous, <kbd>n</kbd> next, <kbd>f</kbd> first, <kbd>l</kbd> last, <kbd>s</kbd> swap, <kbd>?</kbd> <button id="shortcut-help-link" class="shortcut-help-link" type="button" popovertarget="shortcut-help-popover" popovertargetaction="toggle" aria-controls="shortcut-help-popover" aria-expanded="false">help</button>.</p>
+            <div id="shortcut-help-popover" class="shortcut-help-popover" popover></div>
+            <p id="line-status" class="meta-copy"></p>
+          </div>
+        </section>
+      </section>
+
+      <footer class="page-footer">
+        <a href="./index.html">Home</a>
+        <span class="footer-sep">·</span>
+        <a href="https://github.com/hexanna1/hex-study">GitHub</a>
+        <span class="footer-sep">·</span>
+        <a href="https://www.hexwiki.net/index.php/User:Hexanna">HexWiki</a>
+      </footer>
+
+      <script src="./position.js"></script>
+      <script src="./study_ui.js"></script>
+      <script src="./move_tree.js"></script>
+      <script src="./board_editor.js"></script>
+      <script src="./y.js"></script>
+    </main>
+  </body>
+</html>
