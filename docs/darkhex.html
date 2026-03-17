@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dark Hex · Hex Study Tools</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="page home-page result-page">
+      <header class="hero">
+        <a class="site-mark" href="./index.html">Hex Study</a>
+        <span class="header-sep" aria-hidden="true">/</span>
+        <h1>Dark Hex</h1>
+      </header>
+
+      <p class="result-source"><a href="https://github.com/hexanna1/dark-hex">Repository with strategies, proofs, and code</a></p>
+      <p>Standard Dark Hex is solved on 3×4 and 4×4 boards. With optimal play, Red wins about <strong>21.16%</strong> and <strong>79.34%</strong> of the time, respectively.</p>
+      <p>The exact probabilities are <span class="result-value">14279 / 67484</span> for 3×4 and <span class="result-value">5345119702052171 / 6736824633547900</span> for 4×4. The result comes with optimal randomized strategies for both players. Exact best-response checks against those strategies establish matching lower and upper bounds. For 3×4, the previous published bound was <a href="https://www.sfu.ca/~jed/Conferences/CCC2023abstracts.pdf">1/7 to 1/4</a>.</p>
+
+      <h2>The game</h2>
+      <p>Board sizes are given as columns × rows. Red connects top to bottom; Blue connects left to right. Players see their own stones and remember their own probes, but cannot see the opponent's stones. If a probe hits an occupied cell, it fails privately and the player tries again. A successful placement ends the turn. Red's first move is hidden from Blue.</p>
+
+      <h2>The strategies</h2>
+      <p>The published strategies give probabilities for the next probe at each private history. Explore either player's 4×4 strategy from the GitHub certificates. An optimal strategy guarantees the game's value, but may make weaker moves in histories that do not affect that guarantee.</p>
+      <aside class="strategy-example" aria-labelledby="policy-example-title">
+        <h3 id="policy-example-title">Explore a 4×4 strategy</h3>
+        <div class="policy-player" role="group" aria-label="Strategy">
+          <button id="policy-red" type="button" aria-pressed="true">Red</button>
+          <button id="policy-blue" type="button" aria-pressed="false">Blue</button>
+        </div>
+        <p>Choose a highlighted cell and, if asked, whether it is empty or occupied. Numbers show how often this optimal strategy chooses each highlighted cell (%).</p>
+        <div id="policy-inspector" class="policy-inspector" hidden>
+          <div>
+            <svg id="policy-board" class="policy-board" aria-label="4 by 4 Dark Hex strategy board"></svg>
+            <div id="policy-history" class="policy-history" role="group" aria-label="Probe history"></div>
+            <div id="policy-nav" class="study-nav" role="group" aria-label="Probe navigation">
+              <div class="study-nav-group">
+                <button id="move-first-btn" class="study-nav-btn" type="button" aria-label="First probe">|&lt;</button>
+                <button id="move-prev-btn" class="study-nav-btn" type="button" aria-label="Previous probe">&lt;</button>
+                <button id="move-next-btn" class="study-nav-btn" type="button" aria-label="Next probe">&gt;</button>
+                <button id="move-last-btn" class="study-nav-btn" type="button" aria-label="Last probe">&gt;|</button>
+              </div>
+            </div>
+          </div>
+          <div>
+            <p id="policy-status" class="policy-status" role="status">Loading strategy…</p>
+            <p id="policy-warning" class="policy-warning" role="status" hidden></p>
+            <div id="policy-outcomes" class="policy-outcomes" role="group" aria-label="What did the probe find?" hidden>
+              <button id="policy-placed" type="button" aria-keyshortcuts="E" disabled>Empty: place stone</button>
+              <button id="policy-occupied" type="button" aria-keyshortcuts="O" disabled>Occupied: try again</button>
+            </div>
+            <div class="policy-navigation">
+              <button id="policy-reset" type="button" aria-keyshortcuts="Shift+N" disabled>Reset</button>
+            </div>
+          </div>
+        </div>
+        <noscript><p>Enable JavaScript to explore the strategy.</p></noscript>
+        <p class="policy-note">Numbers show turns; × marks failed probes.</p>
+      </aside>
+      <p>The explorer shows the published 4×4 pair. The certificates share identical continuations to keep the strategies compact. Those optimal strategies are not unique: in realization weights, the known optimal sets have affine dimension at least 7 for Red and 15 for Blue. Blue's first-probe probabilities can vary among optimal strategies.</p>
+
+      <h2>Public openings</h2>
+      <p>In this variant, Red's first stone is announced before Blue moves. Every opening is solved. The boards show <strong>Red's win probability (%)</strong> for each announced opening, assuming optimal play afterward.</p>
+      <div class="result-boards">
+        <figure class="result-board">
+        <table class="result-data">
+          <caption>3×4</caption>
+          <thead><tr><th scope="col"></th><th scope="col">a</th><th scope="col">b</th><th scope="col">c</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">1</th><td>0.0000</td><td>0.0000</td><td>0.0000</td></tr>
+            <tr><th scope="row">2</th><td>9.5671</td><td>14.2857</td><td>0.0000</td></tr>
+            <tr><th scope="row">3</th><td>0.0000</td><td>14.2857</td><td>9.5671</td></tr>
+            <tr><th scope="row">4</th><td>0.0000</td><td>0.0000</td><td>0.0000</td></tr>
+          </tbody>
+        </table>
+        </figure>
+        <figure class="result-board">
+        <table class="result-data">
+          <caption>4×4</caption>
+          <thead><tr><th scope="col"></th><th scope="col">a</th><th scope="col">b</th><th scope="col">c</th><th scope="col">d</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">1</th><td>35.8743</td><td>39.0359</td><td>50.0000</td><td>74.0220</td></tr>
+            <tr><th scope="row">2</th><td>46.0755</td><td>46.4856</td><td>58.2781</td><td>39.0248</td></tr>
+            <tr><th scope="row">3</th><td>39.0248</td><td>58.2781</td><td>46.4856</td><td>46.0755</td></tr>
+            <tr><th scope="row">4</th><td>74.0220</td><td>50.0000</td><td>39.0359</td><td>35.8743</td></tr>
+          </tbody>
+        </table>
+        </figure>
+      </div>
+      <p>On 3×4, b2 and b3 are the best announced openings. Red's win probability falls from <strong>21.16% to 14.29%</strong>, a drop of 6.87 percentage points.</p>
+      <p>On 4×4, d1 and a4 are best. Red's win probability falls from <strong>79.34% to 74.02%</strong>, a drop of 5.32 percentage points.</p>
+
+      <script src="./position.js"></script>
+      <script src="./study_ui.js"></script>
+      <script src="./move_tree.js"></script>
+      <script src="./darkhex.js"></script>
+      <script src="./darkhex_policy.js"></script>
+
+    </main>
+    <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "e1156a581aca4e9bb358a3655fc3714b"}'></script>
+  </body>
+</html>
