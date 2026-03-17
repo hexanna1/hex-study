@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Updates · Hex Study Tools</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="page home-page">
+      <header class="hero">
+        <a class="site-mark" href="./index.html">Hex Study</a>
+        <span class="header-sep" aria-hidden="true">/</span>
+        <h1>Updates</h1>
+      </header>
+
+      <h2 class="update-date"><time datetime="2026-10-28">October 28, 2026</time></h2>
+      <section class="landing-grid" aria-label="Updates for October 28, 2026">
+        <article class="landing-row">
+          <div>
+            <h2>Board editors</h2>
+            <div class="update-links"><a href="./hex.html">Hex</a><a href="./y.html">Y</a><a href="./yavalath.html">Yavalath</a><a href="./benty.html">Bent-Y</a></div>
+          </div>
+          <div class="update-content">
+            <p>Analyze positions in your browser with KataHex.</p>
+            <ul>
+              <li><strong>Live analysis:</strong> Get live engine analysis as you explore a position. The editors also support branching and drag-to-move editing.</li>
+              <li><strong>Batch analysis:</strong> Batched GPU inference quickly evaluates each position in a game, producing a move-by-move graph.</li>
+              <li><strong>Networks:</strong> The default models were trained from scratch with self-play in a KataGo/KataHex-style pipeline and have about 2 million parameters each. Hex and Y use CNNs; Yavalath and Bent-Y use transformers. Bent-Y uses graph attention to follow the board's geometry. The larger KataHex model is also available for Hex.</li>
+              <li><strong>In the browser:</strong> WebGPU runs the analysis locally, using quantized weights for smaller downloads and FP16 and Winograd convolutions where supported to speed up inference.</li>
+            </ul>
+          </div>
+        </article>
+        <article class="landing-row">
+          <div>
+            <h2><a class="update-title-link" href="./rex.html">6×6 Rex solver</a></h2>
+          </div>
+          <div class="update-content">
+            <p>Rex (misère Hex) now has an interactive solver for boards through 6×6.</p>
+            <ul>
+              <li>Young and Hayward's <a href="https://webdocs.cs.ualberta.ca/~hayward/papers/solrex.pdf">Solrex paper</a> established that the first player wins 6×6 Rex.</li>
+              <li>Drawing on ideas from the paper, the browser solver uses a complete, independently checked decision diagram to look up position outcomes. The 6×6 download is about 3.9 MB.</li>
+            </ul>
+          </div>
+        </article>
+        <article class="landing-row">
+          <div>
+            <h2>6×6 Rex+ solved</h2>
+            <div class="update-links"><a href="./rexplus.html">Rex+ solver (up to 5×5)</a></div>
+          </div>
+          <div class="update-content">
+            <p>The second player wins 6×6 Rex+ with optimal play. Rex+ is misère Hex where players place one or more stones per turn.</p>
+            <ul>
+              <li>Veronika Keras's <a href="https://arxiv.org/abs/2606.02468">unique-winning-set theorem</a> shows that if any first turn wins, a symmetry-invariant one must win. The proof checks all 2,047 such candidates and rules each out.</li>
+              <li>The <a href="https://github.com/hexanna1/rexplus">proof and verification code are on GitHub</a>; the verifier recomputes the result without a large proof download or saved search state.</li>
+              <li>The online solver stops at 5×5: the proof settles the empty 6×6 board, but does not solve every position. An interactive solver would also need to answer arbitrary positions quickly with a practical browser download size.</li>
+            </ul>
+          </div>
+        </article>
+        <article class="landing-row">
+          <div>
+            <h2><a class="update-title-link" href="./darkhex.html">4×4 Dark Hex solved</a></h2>
+          </div>
+          <div class="update-content">
+            <p>With optimal play, Red wins standard 4×4 Dark Hex about 79.34% of the time.</p>
+            <ul>
+              <li>Every 4×4 opening is also solved for the variant where Red announces the first move. With the best announced opening, Red's win probability drops to 74.02%.</li>
+              <li>Exact optimal strategies for both players give matching bounds against unrestricted best responses. The <a href="https://github.com/hexanna1/dark-hex">strategies and verification code are on GitHub</a>.</li>
+            </ul>
+          </div>
+        </article>
+      </section>
+
+    </main>
+    <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "e1156a581aca4e9bb358a3655fc3714b"}'></script>
+  </body>
+</html>
