@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Y Board Editor</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="page study-page-wide y-page">
+      <header class="hero">
+        <h1>Y Board Editor</h1>
+      </header>
+
+      <section class="layout study-layout-wide">
+        <section class="panel board-panel study-board-panel-wide">
+          <div class="board-topbar">
+            <p id="y-status" class="turn-indicator">Turn: Red</p>
+            <div class="board-controls">
+              <button id="reset-btn" class="board-reset" type="button">Reset</button>
+            </div>
+          </div>
+          <svg id="board" class="board study-board-wide y-board" aria-label="Y board editor"></svg>
+        </section>
+
+        <section class="detail-panel study-detail-panel-wide">
+          <div class="detail-card">
+            <div class="detail-inline-row">
+              <h2>Size</h2>
+              <div id="size-stepper" class="y-size-stepper" aria-label="Board size">
+                <button id="size-prev-btn" class="study-nav-btn" type="button" aria-label="Smaller board">&lt;</button>
+                <input id="size-input" class="board-size-input" type="text" inputmode="numeric" pattern="[0-9]*" value="15" aria-label="Board size">
+                <button id="size-next-btn" class="study-nav-btn" type="button" aria-label="Larger board">&gt;</button>
+              </div>
+            </div>
+            <div class="detail-inline-row canonical-row">
+              <h2 class="canonical-label">Line</h2>
+              <button id="current-line" class="copyable-code" type="button" title="Click to copy">15,</button>
+            </div>
+            <div id="move-list" class="move-list" aria-label="Move list"></div>
+            <div id="move-nav" class="study-nav" aria-label="Navigation">
+              <div class="study-nav-group" aria-label="Move navigation">
+                <button id="move-first-btn" class="study-nav-btn" type="button" aria-label="Start">|&lt;</button>
+                <button id="move-prev-btn" class="study-nav-btn" type="button" aria-label="Previous move">&lt;</button>
+                <button id="move-next-btn" class="study-nav-btn" type="button" aria-label="Next move">&gt;</button>
+                <button id="move-last-btn" class="study-nav-btn" type="button" aria-label="End">&gt;|</button>
+              </div>
+            </div>
+            <p id="shortcut-hint" class="meta-copy shortcut-hint">Shortcuts: <kbd>p</kbd> previous, <kbd>n</kbd> next, <kbd>f</kbd> first, <kbd>l</kbd> last, <kbd>s</kbd> swap, <kbd>Shift-P</kbd> pass.</p>
+            <p id="line-status" class="meta-copy"></p>
+          </div>
+        </section>
+      </section>
+
+      <footer class="page-footer">
+        <a href="./index.html">Home</a>
+        <span class="footer-sep">·</span>
+        <a href="https://github.com/hexanna1/hex-study">GitHub</a>
+        <span class="footer-sep">·</span>
+        <a href="https://www.hexwiki.net/index.php/User:Hexanna">HexWiki</a>
+      </footer>
+
+      <script src="./study_ui.js"></script>
+      <script src="./move_tree.js"></script>
+      <script src="./y.js"></script>
+    </main>
+  </body>
+</html>
