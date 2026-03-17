@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hex Local Pattern Explorer</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <h1>Hex Local Pattern Explorer</h1>
+      </header>
+
+      <section class="layout">
+        <section class="panel board-panel">
+          <div class="board-topbar">
+            <p id="turn-indicator" class="turn-indicator">Turn: Blue</p>
+            <div class="board-controls">
+              <button id="clear-btn" class="board-reset" type="button">Reset</button>
+              <button id="random-btn" class="board-random" type="button">Random</button>
+              <div class="board-random-mode" role="group" aria-label="Random pattern pool">
+                <button id="random-le4-btn" class="random-mode-btn is-active" type="button" aria-pressed="true" title="Random ≤4-move patterns">≤4</button>
+                <button id="random-5-btn" class="random-mode-btn" type="button" aria-pressed="false" title="Random 5-move patterns">5</button>
+              </div>
+            </div>
+          </div>
+          <svg id="board" class="board" aria-label="Local pattern editor"></svg>
+        </section>
+
+        <section class="panel detail-panel">
+          <div class="detail-card">
+            <label class="field-label" for="pattern-input">Pattern</label>
+            <div class="input-row">
+              <input id="pattern-input" type="text" spellcheck="false" value="+[]-[0,0]" />
+            </div>
+            <h2 class="canonical-label">Canonical</h2>
+            <button id="canonical-pattern" class="copyable-code" type="button" title="Click to copy">—</button>
+            <p id="results-count" class="meta-copy"></p>
+            <p id="lookup-status" class="card-copy"></p>
+          </div>
+          <div class="detail-card info-card">
+            <h2>About This Study</h2>
+            <p class="card-copy">
+              These numbers are local move stone percents for the side to move. <strong>100</strong> means the
+              strongest local reply, and <strong>0</strong> is the pass baseline.
+            </p>
+            <p class="card-copy">
+              They are computed by pooling equivalent local replies across symmetry-related balanced positions and
+              subtracting a matched baseline to reduce edge and whole-board effects. A typical local move is pooled
+              over 24 KataHex raw-NN evaluations (12 D6 symmetries &times; 2 for the matched ablation baseline).
+            </p>
+            <p class="meta-copy">
+              For more details, see the
+              <a href="https://github.com/hexanna1/hex-study/blob/main/plan/local_pattern_study_spec.md">spec</a>.
+            </p>
+          </div>
+          <div class="detail-card symmetry-card">
+            <h2>Symmetry Examples</h2>
+            <div class="symmetry-grid">
+              <button class="symmetry-btn" type="button" data-pattern="+[]-[0,0]">1</button>
+              <button class="symmetry-btn" type="button" data-pattern="+[0,0:0,2:2,0]-[0,1:1,0:1,1]">2</button>
+              <button class="symmetry-btn" type="button" data-pattern="+[0,1]-[0,0:0,2]">3</button>
+              <button class="symmetry-btn" type="button" data-pattern="+[0,0:0,3:3,0]-[0,1:1,2:2,0]">4</button>
+              <button class="symmetry-btn" type="button" data-pattern="+[0,0]-[1,-2:2,-1]">6</button>
+              <button class="symmetry-btn" type="button" data-pattern="+[0,0:1,-2]-[0,1:2,-3:2,0]">12</button>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <footer class="page-footer">
+        <a href="./index.html">Home</a>
+        <span class="footer-sep">·</span>
+        <a href="https://github.com/hexanna1/hex-study">GitHub</a>
+        <span class="footer-sep">·</span>
+        <a href="https://www.hexwiki.net/index.php/User:Hexanna">HexWiki</a>
+      </footer>
+
+      <script src="./study_ui.js"></script>
+      <script src="./patterns.js"></script>
+    </main>
+  </body>
+</html>
