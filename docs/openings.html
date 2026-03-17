@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hex Opening Explorer</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="page opening-page">
+      <header class="hero">
+        <h1>Hex Opening Explorer</h1>
+      </header>
+
+      <section class="layout opening-layout">
+        <section class="panel board-panel opening-board-panel">
+          <div class="board-topbar">
+            <p id="opening-status" class="turn-indicator">Turn: Red</p>
+            <div class="board-controls">
+              <button id="reset-btn" class="board-reset" type="button">Reset</button>
+              <button id="random-btn" class="board-random" type="button">Random</button>
+              <div class="board-random-mode" role="group" aria-label="Random opening pool">
+                <button id="random-core-btn" class="random-mode-btn is-active" type="button" aria-pressed="true" title="Random high-importance opening positions">Core</button>
+                <button id="random-leaf-btn" class="random-mode-btn" type="button" aria-pressed="false" title="Random deeper opening positions">Leaf</button>
+              </div>
+            </div>
+          </div>
+          <svg id="board" class="board opening-board" aria-label="Opening board"></svg>
+        </section>
+
+        <section class="panel detail-panel opening-detail-panel">
+          <div class="detail-card">
+            <div class="detail-inline-row">
+              <h2>Size</h2>
+              <div class="button-row opening-size-buttons" role="group" aria-label="Board size">
+                <button id="size-11-btn" type="button">11</button>
+                <button id="size-12-btn" type="button">12</button>
+                <button id="size-13-btn" type="button">13</button>
+                <button id="size-14-btn" type="button">14</button>
+                <button id="size-17-btn" type="button">17</button>
+              </div>
+            </div>
+            <div class="detail-inline-row canonical-row">
+              <h2 class="canonical-label">Line</h2>
+              <button id="current-line" class="copyable-code" type="button" title="Click to copy">root</button>
+            </div>
+            <div id="move-list" class="move-list" aria-label="Move list"></div>
+            <p id="line-meta" class="meta-copy"></p>
+            <p id="hexworld-link" class="meta-copy"></p>
+          </div>
+
+          <div class="detail-card info-card">
+            <h2>About This Study</h2>
+            <p class="card-copy">
+              These numbers are KataHex raw-NN <strong id="metric-label">winrates</strong> for candidate moves at the
+              current position.
+            </p>
+            <p class="card-copy">
+              This study begins from fair swap openings and keeps stronger whole-board continuations. The purple moves
+              are the continuations you can follow from the current position.
+            </p>
+            <p class="meta-copy joseki-move-hint">Shortcuts: <kbd>p</kbd> previous, <kbd>n</kbd> next, <kbd>f</kbd> first, <kbd>l</kbd> last, <kbd>t</kbd> winrate/prior labels.</p>
+            <p class="meta-copy">
+              For more details, see the
+              <a href="https://github.com/hexanna1/hex-study/blob/main/plan/opening_joseki_database_spec.md">spec</a>.
+            </p>
+          </div>
+        </section>
+      </section>
+
+      <footer class="page-footer">
+        <a href="./index.html">Home</a>
+        <span class="footer-sep">·</span>
+        <a href="https://github.com/hexanna1/hex-study">GitHub</a>
+        <span class="footer-sep">·</span>
+        <a href="https://www.hexwiki.net/index.php/User:Hexanna">HexWiki</a>
+      </footer>
+
+      <script src="./study_ui.js"></script>
+      <script src="./openings.js"></script>
+    </main>
+  </body>
+</html>

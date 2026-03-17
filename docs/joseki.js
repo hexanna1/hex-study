@@ -1,0 +1,898 @@
+const MANIFEST_URL = "./data/joseki_current.json"
+const HEX_SIZE = 26
+const VIEW_PADDING = 40
+const LOCAL_BOARD_SIZE = 10
+const LOCAL_DELTA_MAX = {
+  A: 127,
+  O: 64,
+}
+const TENUKI_POINT = { col: -1, row: Math.round((2 * LOCAL_BOARD_SIZE) / 3) }
+
+const RED_RGB = [220, 60, 60]
+const BLUE_RGB = [40, 100, 220]
+const TEXT_ON_DARK_RGB = [250, 250, 250]
+const OFF_WHITE_RGB = [246, 241, 232]
+const GRID_EDGE = "rgb(182, 182, 182)"
+const CANDIDATE_LOW = [244, 232, 250]
+const CANDIDATE_HIGH = [170, 125, 210]
+const RANDOM_CORE_IMPORTANCE_MIN = 0.875
+
+const {
+  buildCoreLines,
+  buildDescendantCounts,
+  buildRetainedLeafLines,
+  createLineNavigator,
+  createSvgTools,
+  fractionPercent,
+  formatVisits,
+  lerpRgb,
+  makeResultFill,
+  renderMoveList: renderSharedMoveList,
+  rgbText,
+} = window.HexStudyUI
+
+const elements = {
+  board: document.getElementById("board"),
+  status: document.getElementById("joseki-status"),
+  familyABtn: document.getElementById("family-a-btn"),
+  familyOBtn: document.getElementById("family-o-btn"),
+  randomCoreBtn: document.getElementById("random-core-btn"),
+  randomLeafBtn: document.getElementById("random-leaf-btn"),
+  resetBtn: document.getElementById("reset-btn"),
+  randomBtn: document.getElementById("random-btn"),
+  currentLine: document.getElementById("current-line"),
+  moveList: document.getElementById("move-list"),
+  lineMeta: document.getElementById("line-meta"),
+  hexWorldLink: document.getElementById("hexworld-link"),
+}
+
+const resultFill = makeResultFill(CANDIDATE_LOW, CANDIDATE_HIGH)
+const {
+  appendHex,
+  appendLine,
+  appendStackedText,
+  appendText,
+  clear: clearSvg,
+  hexCorner,
+  pointToPixel,
+} = createSvgTools({
+  board: elements.board,
+  hexSize: HEX_SIZE,
+  defaultFill: rgbText(OFF_WHITE_RGB),
+  defaultStroke: GRID_EDGE,
+  defaultStrokeWidth: "0.9",
+})
+
+const QUERY = parseQuery()
+
+const state = {
+  data: null,
+  nodesByLine: new Map(),
+  descendantCountsByLine: new Map(),
+  dataByUrl: new Map(),
+  manifestByUrl: new Map(),
+  currentLine: "",
+  family: "A",
+  randomMode: "core",
+  lineHistory: [""],
+  lineHistoryIndex: 0,
+}
+
+function fractionText(value) {
+  return (100 * Number(value)).toFixed(1)
+}
+
+function localDelta(local, family) {
+  const dq = Number(local[0]) - 1
+  const dr = Number(local[1]) - 1
+  if (family === "O") {
+    return (dq * dq) - (dq * dr) + (dr * dr)
+  }
+  return (dq * dq) + (dq * dr) + (dr * dr)
+}
+
+function parseQuery() {
+  const params = new URLSearchParams(window.location.search)
+  return {
+    data: String(params.get("data") || "").trim(),
+  }
+}
+
+function parseEntries(line, family) {
+  if (!line) {
+    return []
+  }
+  const match = /^([AO])\[(.*)\]$/.exec(String(line).trim())
+  if (!match || match[1] !== family) {
+    return []
+  }
+  if (match[2] === "") {
+    return []
+  }
+  return match[2].split(":").map((token) => {
+    if (!token) {
+      return null
+    }
+    const parts = token.split(",")
+    if (parts.length !== 2) {
+      return null
+    }
+    return [Number(parts[0]), Number(parts[1])]
+  })
+}
+
+function inferFamilyFromLine(line) {
+  const match = /^([AO])\[/.exec(String(line || "").trim())
+  return match ? match[1] : null
+}
+
+function rootFamilyFromLine(line) {
+  const match = /^([AO])\[\]$/.exec(String(line || "").trim())
+  return match ? match[1] : null
+}
+
+function currentFamily() {
+  return inferFamilyFromLine(state.currentLine) || state.family || "A"
+}
+
+async function currentDataUrl() {
+  if (QUERY.data) {
+    return QUERY.data
+  }
+  let manifest = state.manifestByUrl.get(MANIFEST_URL)
+  if (!manifest) {
+    const response = await fetch(MANIFEST_URL, { cache: "no-store" })
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+    manifest = await response.json()
+    state.manifestByUrl.set(MANIFEST_URL, manifest)
+  }
+  const family = currentFamily()
+  const bundle = manifest?.bundles?.[family]
+  if (typeof bundle !== "string" || !bundle) {
+    throw new Error(`Missing joseki bundle for family ${family}`)
+  }
+  return new URL(bundle, new URL(MANIFEST_URL, window.location.href)).toString()
+}
+
+function decodeCompactNode(rawNode, family) {
+  const line = String(rawNode?.l || "")
+  const entries = parseEntries(line, family)
+  const retained_lines = []
+  const candidates = []
+  for (const row of rawNode?.c || []) {
+    if (!Array.isArray(row) || row.length < 3) {
+      continue
+    }
+    const local = [Number(row[0]), Number(row[1])]
+    candidates.push({
+      kind: "local",
+      local,
+      stone_fraction: Number(row[2]),
+    })
+    retained_lines.push(formatLine(family, [...entries, local]))
+  }
+  if (Array.isArray(rawNode?.t) && rawNode.t.length >= 1) {
+    candidates.push({
+      kind: "tenuki",
+      stone_fraction: Number(rawNode.t[0]),
+    })
+    if (Number(rawNode.t[1] || 0) && entries.length > 0) {
+      retained_lines.push(formatLine(family, [...entries, null]))
+    }
+  }
+  return { line, retained_lines, candidates, importance: Number(rawNode?.i || 0) }
+}
+
+function normalizeLoadedData(raw) {
+  if (!Array.isArray(raw?.nodes)) {
+    throw new Error("Unsupported joseki data format")
+  }
+  const family = String(raw?.family || currentFamily() || "A").trim().toUpperCase()
+  return {
+    board_size: Number(raw?.board_size || 19),
+    nodes: raw.nodes.map((node) => decodeCompactNode(node, family)),
+  }
+}
+
+function lineMetaText(line) {
+  const count = Number(state.descendantCountsByLine.get(String(line || "")) || 0)
+  return `${formatVisits(count)} position${count === 1 ? "" : "s"} in subtree`
+}
+
+function childSubtreeCount(childLine) {
+  if (!childLine) {
+    return 1
+  }
+  return 1 + Number(state.descendantCountsByLine.get(String(childLine || "")) || 0)
+}
+
+function retainedLeafLines() {
+  return buildRetainedLeafLines(
+    state.nodesByLine,
+    (node) => (Array.isArray(node?.retained_lines) ? node.retained_lines : []),
+  )
+}
+
+function coreLines() {
+  return buildCoreLines(state.nodesByLine, RANDOM_CORE_IMPORTANCE_MIN)
+}
+
+function lineParent(line, family = null) {
+  const familyValue = family || inferFamilyFromLine(line)
+  if (!familyValue) {
+    return ""
+  }
+  const entries = parseEntries(line, familyValue)
+  if (entries.length === 0) {
+    return ""
+  }
+  const kept = entries.slice(0, -1).map((entry) => (entry ? `${entry[0]},${entry[1]}` : ""))
+  return kept.length === 0 ? "" : `${familyValue}[${kept.join(":")}]`
+}
+
+function entriesEqual(a, b) {
+  if (a === null || b === null) {
+    return a === b
+  }
+  return Array.isArray(a) && Array.isArray(b) && Number(a[0]) === Number(b[0]) && Number(a[1]) === Number(b[1])
+}
+
+function formatLine(family, entries) {
+  if (!entries.length) {
+    return ""
+  }
+  return `${family}[${entries.map((entry) => (entry ? `${entry[0]},${entry[1]}` : "")).join(":")}]`
+}
+
+function familyMoveToCell(family, move, boardSize) {
+  const x = Number(move[0])
+  const y = Number(move[1])
+  const size = Number(boardSize)
+  if (family === "O") {
+    return `${String.fromCharCode(96 + y)}${size - x + 1}`
+  }
+  return `${String.fromCharCode(96 + (size - y + 1))}${size - x + 1}`
+}
+
+function hexWorldUrlForLine(line, fallbackFamily = null) {
+  const family = inferFamilyFromLine(line) || fallbackFamily || currentFamily()
+  if (!family) {
+    return null
+  }
+  const boardSize = Number(state.data?.board_size || 19)
+  const entries = parseEntries(String(line || ""), family)
+  const stream = entries.map((entry) => (entry ? familyMoveToCell(family, entry, boardSize) : ":p")).join("")
+  return `https://hexworld.org/board/#${boardSize}c1,${stream}`
+}
+
+function displayLineText(node) {
+  const family = String(inferFamilyFromLine(node?.line || "") || currentFamily() || "")
+  if (!state.currentLine) {
+    return family ? `${family}[]` : "—"
+  }
+  return state.currentLine
+}
+
+function moveText(entry) {
+  return entry ? `${entry[0]}-${entry[1]}` : "tenuki"
+}
+
+function linePrefixes(line, family = null) {
+  const familyValue = family || inferFamilyFromLine(line)
+  if (!familyValue) {
+    return []
+  }
+  const entries = parseEntries(String(line || ""), familyValue)
+  const prefixes = []
+  for (let i = 1; i <= entries.length; i += 1) {
+    prefixes.push(formatLine(familyValue, entries.slice(0, i)))
+  }
+  return prefixes
+}
+
+function lineEntries(line) {
+  const family = inferFamilyFromLine(line) || currentFamily()
+  if (!family) {
+    return []
+  }
+  return parseEntries(String(line || ""), family)
+}
+
+const {
+  deleteFromCursor,
+  futureTailLines,
+  goFirst,
+  goLast,
+  goNext,
+  goPrevious,
+  goToLine,
+  jumpToLine,
+  resetLineHistory,
+  setCursorLine,
+} = createLineNavigator({
+  state,
+  parseLine: lineEntries,
+  linePrefixes,
+  lineParent,
+  sanitizeLine: (line) => String(line || ""),
+  setHashFromLine,
+  render: () => render(),
+  entryEquals: entriesEqual,
+  canFollowLine: (previousLine, nextLine) => {
+    const previousFamily = inferFamilyFromLine(previousLine) || currentFamily()
+    const nextFamily = inferFamilyFromLine(nextLine) || previousFamily
+    return previousFamily === nextFamily
+  },
+})
+
+function renderMoveList() {
+  const family = currentFamily()
+  if (!family) {
+    elements.moveList.replaceChildren()
+    return
+  }
+  const currentLine = String(state.currentLine || "")
+  const currentEntries = parseEntries(currentLine, family)
+  const currentMoveCount = currentEntries.length
+  const futureLines = futureTailLines()
+  const parts = [
+    ...currentEntries.map((entry, index) => ({
+      text: moveText(entry),
+      isFuture: false,
+      line: formatLine(family, currentEntries.slice(0, index + 1)),
+    })),
+    ...futureLines.map((line) => {
+      const entries = parseEntries(line, family)
+      return {
+        text: moveText(entries[entries.length - 1] || null),
+        isFuture: true,
+        line,
+      }
+    }),
+  ]
+  renderSharedMoveList({
+    container: elements.moveList,
+    parts,
+    currentMoveCount,
+    activateLine: (line) => {
+      setCursorLine(line)
+    },
+  })
+}
+
+function endsInLocalMove(node) {
+  const family = inferFamilyFromLine(node?.line || "") || currentFamily()
+  const entries = family ? parseEntries(String(node?.line || ""), family) : []
+  return entries.length > 0 && entries[entries.length - 1] !== null
+}
+
+function childLineForCandidate(node, row) {
+  const family = String(inferFamilyFromLine(node.line || "") || currentFamily() || "")
+  const entries = parseEntries(String(node.line || ""), family)
+  if (row.kind === "local" && Array.isArray(row.local) && row.local.length === 2) {
+    return formatLine(family, [...entries, [Number(row.local[0]), Number(row.local[1])]])
+  }
+  if (row.kind === "tenuki" && entries.length > 0) {
+    return formatLine(family, [...entries, null])
+  }
+  return null
+}
+
+function localToDisplay(local, family) {
+  const x = Number(local[0])
+  const y = Number(local[1])
+  if (family === "O") {
+    return {
+      col: y,
+      row: LOCAL_BOARD_SIZE - x + 1,
+    }
+  }
+  return {
+    col: LOCAL_BOARD_SIZE - y + 1,
+    row: LOCAL_BOARD_SIZE - x + 1,
+  }
+}
+
+function displayToLocal(col, row, family) {
+  if (family === "O") {
+    return [
+      LOCAL_BOARD_SIZE - Number(row) + 1,
+      Number(col),
+    ]
+  }
+  return [
+    LOCAL_BOARD_SIZE - Number(row) + 1,
+    LOCAL_BOARD_SIZE - Number(col) + 1,
+  ]
+}
+
+function displayCellInLocalRegion(col, row, family) {
+  if (Number(col) < 1 || Number(col) > LOCAL_BOARD_SIZE || Number(row) < 1 || Number(row) > LOCAL_BOARD_SIZE) {
+    return false
+  }
+  return localDelta(displayToLocal(col, row, family), family) <= Number(LOCAL_DELTA_MAX[family] || LOCAL_DELTA_MAX.A)
+}
+
+function boardPointsForNode(node) {
+  const family = String(inferFamilyFromLine(node.line || "") || currentFamily() || "A")
+  const entries = parseEntries(String(node.line || ""), family)
+  const stones = []
+  const currentOccupiedPly = entries.length > 0 && entries[entries.length - 1] ? entries.length : null
+  let tenukiStone = null
+  for (let i = 0; i < entries.length; i += 1) {
+    const entry = entries[i]
+    if (!entry) {
+      const color = i % 2 === 0 ? "red" : "blue"
+      const base = color === "red" ? RED_RGB : BLUE_RGB
+      tenukiStone = {
+        color,
+        ply: i + 1,
+        isLast: entries.length === i + 1,
+        textColor: rgbText((entries.length === i + 1) ? TEXT_ON_DARK_RGB : lerpRgb(base, TEXT_ON_DARK_RGB, 0.45)),
+      }
+      continue
+    }
+    const point = localToDisplay(entry, family)
+    const color = i % 2 === 0 ? "red" : "blue"
+    const base = color === "red" ? RED_RGB : BLUE_RGB
+    stones.push({
+      col: point.col,
+      row: point.row,
+      color,
+      ply: i + 1,
+      isLast: currentOccupiedPly === i + 1,
+      textColor: rgbText((currentOccupiedPly === i + 1) ? TEXT_ON_DARK_RGB : lerpRgb(base, TEXT_ON_DARK_RGB, 0.45)),
+    })
+  }
+  const overlays = []
+  let tenuki = null
+  const retained = new Set(Array.isArray(node.retained_lines) ? node.retained_lines : [])
+  for (const row of node.candidates || []) {
+    if (row.kind === "local" && Array.isArray(row.local) && row.local.length === 2 && typeof row.stone_fraction === "number") {
+      const childLine = childLineForCandidate(node, row)
+      if (!childLine || !retained.has(childLine)) {
+        continue
+      }
+      const point = localToDisplay(row.local, family)
+      overlays.push({
+        col: point.col,
+        row: point.row,
+        stoneFraction: Number(row.stone_fraction),
+        childLine,
+      })
+    } else if (row.kind === "tenuki" && typeof row.stone_fraction === "number") {
+      const childLine = childLineForCandidate(node, row)
+      tenuki = {
+        stoneFraction: Number(row.stone_fraction),
+        childLine: childLine && retained.has(childLine) ? childLine : null,
+      }
+    }
+  }
+  return { stones, overlays, tenuki, tenukiStone }
+}
+
+function setupViewBox(family) {
+  const pixels = [pointToPixel(TENUKI_POINT.col, TENUKI_POINT.row)]
+  for (let row = 1; row <= LOCAL_BOARD_SIZE; row += 1) {
+    for (let col = 1; col <= LOCAL_BOARD_SIZE; col += 1) {
+      if (!displayCellInLocalRegion(col, row, family)) {
+        continue
+      }
+      pixels.push(pointToPixel(col, row))
+    }
+  }
+  const xs = pixels.map((point) => point[0])
+  const ys = pixels.map((point) => point[1])
+  const minX = Math.min(...xs) - VIEW_PADDING
+  const maxX = Math.max(...xs) + VIEW_PADDING
+  const minY = Math.min(...ys) - VIEW_PADDING
+  const maxY = Math.max(...ys) + VIEW_PADDING
+  elements.board.setAttribute("viewBox", `${minX} ${minY} ${maxX - minX} ${maxY - minY}`)
+}
+
+function renderBoard() {
+  clearSvg()
+  const node = state.nodesByLine.get(state.currentLine) || (() => {
+    const family = currentFamily()
+    return family ? { family, line: state.currentLine, candidates: [], retained_lines: [] } : null
+  })()
+  if (!node) {
+    return
+  }
+  const family = String(inferFamilyFromLine(node.line || "") || currentFamily() || "A")
+  const entries = parseEntries(String(node.line || ""), family)
+  setupViewBox(family)
+  const toPlay = entries.length % 2 === 0 ? "red" : "blue"
+  const hoverColor = toPlay === "red" ? rgbText(RED_RGB) : rgbText(BLUE_RGB)
+  const hoverFill = toPlay === "red"
+    ? `rgba(${RED_RGB[0]}, ${RED_RGB[1]}, ${RED_RGB[2]}, 0.12)`
+    : `rgba(${BLUE_RGB[0]}, ${BLUE_RGB[1]}, ${BLUE_RGB[2]}, 0.12)`
+  const { stones, overlays, tenuki, tenukiStone } = boardPointsForNode(node)
+  const stoneByKey = new Map(stones.map((stone) => [`${stone.col},${stone.row}`, stone]))
+  const overlayByKey = new Map(overlays.map((overlay) => [`${overlay.col},${overlay.row}`, overlay]))
+
+  for (let row = 1; row <= LOCAL_BOARD_SIZE; row += 1) {
+    for (let col = 1; col <= LOCAL_BOARD_SIZE; col += 1) {
+      if (!displayCellInLocalRegion(col, row, family)) {
+        continue
+      }
+      const key = `${col},${row}`
+      const stone = stoneByKey.get(key) || null
+      const overlay = overlayByKey.get(key) || null
+      let fill = rgbText(OFF_WHITE_RGB)
+      if (overlay) {
+        fill = resultFill(overlay.stoneFraction)
+      }
+      if (stone) {
+        fill = stone.color === "red" ? rgbText(RED_RGB) : rgbText(BLUE_RGB)
+      }
+      const isRealBorder = col === LOCAL_BOARD_SIZE || row === LOCAL_BOARD_SIZE
+      const hitClasses = ["board-hover-hit"]
+      const onClick = overlay && overlay.childLine
+        ? () => {
+            goToLine(overlay.childLine)
+          }
+        : stone && stone.isLast && state.currentLine
+          ? () => {
+              goPrevious()
+            }
+          : null
+      if (onClick) {
+        hitClasses.push("clickable")
+      }
+      if (overlay && overlay.childLine && !stone) {
+        hitClasses.push("hoverable")
+      }
+      const hoverHex = appendHex(col, row, {
+        fill: "transparent",
+        stroke: "none",
+        className: hitClasses.join(" "),
+        size: HEX_SIZE,
+        onClick,
+      })
+      hoverHex.polygon.style.setProperty("--hover-fill", hoverFill)
+      const hex = appendHex(col, row, {
+        fill,
+        className: `${overlay ? "board-hex candidate is-clickable" : "board-hex"} board-hex-face`,
+        stroke: overlay ? "none" : GRID_EDGE,
+        strokeWidth: isRealBorder ? "1.35" : "0.85",
+      })
+      hex.polygon.style.setProperty("--hover-outline", hoverColor)
+      if (overlay && !stone) {
+        appendStackedText(hex.cx, hex.cy, fractionText(overlay.stoneFraction), formatVisits(childSubtreeCount(overlay.childLine)))
+      }
+      if (stone) {
+        appendText(hex.cx, hex.cy, String(stone.ply), "cell-text", stone.textColor)
+      }
+    }
+  }
+  const tenukiOnClick = tenukiStone && tenukiStone.isLast
+    ? () => {
+        goPrevious()
+      }
+    : (tenuki && tenuki.childLine ? () => {
+        goToLine(tenuki.childLine)
+      } : null)
+  const tenukiHitClasses = ["board-hover-hit"]
+  if (tenukiOnClick) {
+    tenukiHitClasses.push("clickable")
+  }
+  if (!tenukiStone && tenuki && tenuki.childLine) {
+    tenukiHitClasses.push("hoverable")
+  }
+  const tenukiHoverHex = appendHex(TENUKI_POINT.col, TENUKI_POINT.row, {
+    fill: "transparent",
+    stroke: "none",
+    className: tenukiHitClasses.join(" "),
+    size: HEX_SIZE,
+    onClick: tenukiOnClick,
+  })
+  tenukiHoverHex.polygon.style.setProperty("--hover-fill", hoverFill)
+  const tenukiHex = appendHex(TENUKI_POINT.col, TENUKI_POINT.row, {
+    fill: tenukiStone
+      ? (tenukiStone.color === "red" ? rgbText(RED_RGB) : rgbText(BLUE_RGB))
+      : (tenuki && tenuki.childLine ? resultFill(tenuki.stoneFraction) : rgbText(OFF_WHITE_RGB)),
+    className: `${tenukiStone
+      ? "board-hex"
+      : (tenuki && tenuki.childLine ? "board-hex candidate is-clickable" : "board-hex")} board-hex-face`,
+    stroke: tenukiStone ? "none" : GRID_EDGE,
+    strokeWidth: tenukiStone ? "0" : "1.0",
+    onClick: tenukiOnClick,
+  })
+  tenukiHex.polygon.style.setProperty("--hover-outline", hoverColor)
+  appendText(tenukiHex.cx, tenukiHex.cy - (HEX_SIZE * 1.28), "Tenuki", "tenuki-label")
+  if (tenukiStone) {
+    appendText(tenukiHex.cx, tenukiHex.cy, String(tenukiStone.ply), "cell-text", tenukiStone.textColor)
+  } else if (tenuki) {
+    if (tenuki.childLine) {
+      appendStackedText(
+        tenukiHex.cx,
+        tenukiHex.cy,
+        fractionText(tenuki.stoneFraction),
+        formatVisits(childSubtreeCount(tenuki.childLine)),
+      )
+    } else {
+      appendText(tenukiHex.cx, tenukiHex.cy, fractionText(tenuki.stoneFraction))
+    }
+  }
+  const borderWidth = 4
+  const red = rgbText(RED_RGB)
+  const blue = rgbText(BLUE_RGB)
+  if (family === "O") {
+    for (let col = 1; col <= LOCAL_BOARD_SIZE; col += 1) {
+      if (!displayCellInLocalRegion(col, LOCAL_BOARD_SIZE, family)) {
+        continue
+      }
+      const [cx, cy] = pointToPixel(col, LOCAL_BOARD_SIZE)
+      const c3 = hexCorner(cx, cy, HEX_SIZE - 1.5, 3)
+      const c2 = hexCorner(cx, cy, HEX_SIZE - 1.5, 2)
+      const c1 = hexCorner(cx, cy, HEX_SIZE - 1.5, 1)
+      appendLine(c3[0], c3[1], c2[0], c2[1], red, borderWidth)
+      appendLine(c2[0], c2[1], c1[0], c1[1], red, borderWidth)
+    }
+    for (let row = 1; row <= LOCAL_BOARD_SIZE; row += 1) {
+      if (!displayCellInLocalRegion(1, row, family)) {
+        continue
+      }
+      const [cx, cy] = pointToPixel(1, row)
+      const c2 = hexCorner(cx, cy, HEX_SIZE - 1.5, 2)
+      const c3 = hexCorner(cx, cy, HEX_SIZE - 1.5, 3)
+      const c4 = hexCorner(cx, cy, HEX_SIZE - 1.5, 4)
+      appendLine(c2[0], c2[1], c3[0], c3[1], blue, borderWidth)
+      appendLine(c3[0], c3[1], c4[0], c4[1], blue, borderWidth)
+    }
+  } else {
+    for (let col = 1; col <= LOCAL_BOARD_SIZE; col += 1) {
+      const [cx, cy] = pointToPixel(col, LOCAL_BOARD_SIZE)
+      const c3 = hexCorner(cx, cy, HEX_SIZE - 1.5, 3)
+      const c2 = hexCorner(cx, cy, HEX_SIZE - 1.5, 2)
+      const c1 = hexCorner(cx, cy, HEX_SIZE - 1.5, 1)
+      appendLine(c3[0], c3[1], c2[0], c2[1], red, borderWidth)
+      appendLine(c2[0], c2[1], c1[0], c1[1], red, borderWidth)
+    }
+    for (let row = 1; row <= LOCAL_BOARD_SIZE; row += 1) {
+      const [cx, cy] = pointToPixel(LOCAL_BOARD_SIZE, row)
+      const c5 = hexCorner(cx, cy, HEX_SIZE - 1.5, 5)
+      const c0 = hexCorner(cx, cy, HEX_SIZE - 1.5, 0)
+      const c1 = hexCorner(cx, cy, HEX_SIZE - 1.5, 1)
+      appendLine(c5[0], c5[1], c0[0], c0[1], blue, borderWidth)
+      appendLine(c0[0], c0[1], c1[0], c1[1], blue, borderWidth)
+    }
+  }
+}
+
+function setHashFromLine(line) {
+  const family = inferFamilyFromLine(line) || state.family || "A"
+  const hash = line ? `#${line}` : (family === "O" ? "#O[]" : "")
+  const nextUrl = `${window.location.pathname}${window.location.search}${hash}`
+  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`
+  if (nextUrl !== currentUrl) {
+    window.history.replaceState(null, "", nextUrl)
+  }
+}
+
+function renderHexWorldLink(node) {
+  elements.hexWorldLink.replaceChildren()
+  const hexWorldUrl = hexWorldUrlForLine(node.line || "", inferFamilyFromLine(node.line || "") || currentFamily())
+  if (typeof hexWorldUrl === "string" && hexWorldUrl) {
+    const a = document.createElement("a")
+    a.href = hexWorldUrl
+    a.target = "_blank"
+    a.rel = "noopener noreferrer"
+    a.textContent = "View in HexWorld"
+    elements.hexWorldLink.appendChild(a)
+  }
+}
+
+function render() {
+  const node = state.nodesByLine.get(state.currentLine)
+  if (!node) {
+    const family = currentFamily()
+    const entries = family ? parseEntries(state.currentLine, family) : []
+    const toPlay = entries.length % 2 === 0 ? "red" : "blue"
+    elements.status.textContent = family ? `Turn: ${toPlay === "red" ? "Red" : "Blue"}` : "Turn: —"
+    elements.status.className = family ? `turn-indicator ${toPlay === "red" ? "turn-red" : "turn-blue"}` : "turn-indicator"
+    elements.currentLine.textContent = displayLineText({ family })
+    renderMoveList()
+    elements.lineMeta.textContent = lineMetaText(state.currentLine)
+    renderHexWorldLink({ line: state.currentLine || formatLine(family, []) })
+    renderBoard()
+    return
+  }
+  const family = String(inferFamilyFromLine(node.line || "") || currentFamily() || "A")
+  const toPlay = parseEntries(String(node.line || ""), family).length % 2 === 0 ? "red" : "blue"
+  elements.status.textContent = `Turn: ${toPlay === "red" ? "Red" : "Blue"}`
+  elements.status.className = `turn-indicator ${toPlay === "red" ? "turn-red" : "turn-blue"}`
+  elements.currentLine.textContent = displayLineText(node)
+  renderMoveList()
+  elements.lineMeta.textContent = lineMetaText(node.line)
+  renderHexWorldLink(node)
+  renderBoard()
+}
+
+async function loadData() {
+  const dataUrl = await currentDataUrl()
+  const cached = state.dataByUrl.get(dataUrl)
+  if (cached) {
+    state.data = cached.data
+    state.nodesByLine = cached.nodesByLine
+    state.descendantCountsByLine = cached.descendantCountsByLine
+    if (!state.currentLine) {
+      const nodes = Array.isArray(state.data?.nodes) ? state.data.nodes : []
+      state.currentLine = state.nodesByLine.has("") ? "" : (nodes[0] ? String(nodes[0].line || "") : "")
+    }
+    return
+  }
+  const response = await fetch(dataUrl, { cache: "no-store" })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  const data = normalizeLoadedData(await response.json())
+  const nodes = Array.isArray(data.nodes) ? data.nodes : []
+  const nodesByLine = new Map(nodes.map((node) => [String(node.line || ""), node]))
+  const descendantCountsByLine = buildDescendantCounts(
+    nodesByLine,
+    (node) => (Array.isArray(node?.retained_lines) ? node.retained_lines : []),
+  )
+  state.data = data
+  state.nodesByLine = nodesByLine
+  state.descendantCountsByLine = descendantCountsByLine
+  state.dataByUrl.set(dataUrl, { data, nodesByLine, descendantCountsByLine })
+  if (!state.currentLine) {
+    state.currentLine = state.nodesByLine.has("") ? "" : (nodes[0] ? String(nodes[0].line || "") : "")
+  }
+  renderRandomMode()
+}
+
+async function loadFamily(family) {
+  state.family = family
+  state.currentLine = ""
+  try {
+    await loadData()
+    resetLineHistory(state.currentLine)
+    setHashFromLine(state.currentLine)
+    render()
+  } catch (error) {
+    elements.status.textContent = "Load failed"
+    elements.hexWorldLink.textContent = String(error instanceof Error ? error.message : error)
+  }
+}
+
+async function copyCurrentLine() {
+  const text = String(elements.currentLine.textContent || "").trim()
+  if (!text || text === "—") {
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch (_error) {}
+}
+
+function syncFromHash() {
+  const line = window.location.hash ? decodeURIComponent(window.location.hash.slice(1)) : ""
+  const rootFamily = rootFamilyFromLine(line)
+  state.currentLine = rootFamily ? "" : line
+  const family = rootFamily || inferFamilyFromLine(line)
+  if (family) {
+    state.family = family
+  }
+}
+
+function goRandom() {
+  const allLines = (state.randomMode === "leaf" ? retainedLeafLines() : coreLines())
+    .filter((line) => String(line || "") !== "")
+  if (!allLines.length) {
+    return
+  }
+  const localLines = allLines.filter((line) => {
+    const family = inferFamilyFromLine(line) || currentFamily()
+    const entries = line ? parseEntries(line, family) : []
+    return entries.length > 0 && entries[entries.length - 1] !== null
+  })
+  const eligible = localLines.length ? localLines : allLines
+  const filtered =
+    eligible.length > 1 && state.currentLine
+      ? eligible.filter((line) => String(line || "") !== state.currentLine)
+      : eligible
+  const pool = filtered.length ? filtered : eligible
+  const line = String(pool[Math.floor(Math.random() * pool.length)] || "")
+  if (!line && !pool.includes("")) {
+    return
+  }
+  jumpToLine(line)
+}
+
+function renderRandomMode() {
+  const coreActive = state.randomMode === "core"
+  elements.randomCoreBtn.classList.toggle("is-active", coreActive)
+  elements.randomCoreBtn.setAttribute("aria-pressed", coreActive ? "true" : "false")
+  elements.randomLeafBtn.classList.toggle("is-active", !coreActive)
+  elements.randomLeafBtn.setAttribute("aria-pressed", !coreActive ? "true" : "false")
+}
+
+elements.familyABtn.addEventListener("click", () => {
+  void loadFamily("A")
+})
+elements.familyOBtn.addEventListener("click", () => {
+  void loadFamily("O")
+})
+elements.randomCoreBtn.addEventListener("click", () => {
+  state.randomMode = "core"
+  renderRandomMode()
+})
+elements.randomLeafBtn.addEventListener("click", () => {
+  state.randomMode = "leaf"
+  renderRandomMode()
+})
+elements.resetBtn.addEventListener("click", () => {
+  jumpToLine("")
+})
+elements.randomBtn.addEventListener("click", () => {
+  goRandom()
+})
+elements.currentLine.addEventListener("click", () => {
+  void copyCurrentLine()
+})
+window.addEventListener("hashchange", () => {
+  void (async () => {
+    syncFromHash()
+    try {
+      await loadData()
+      resetLineHistory(state.currentLine)
+      render()
+    } catch (error) {
+      elements.status.textContent = "Load failed"
+      elements.hexWorldLink.textContent = String(error instanceof Error ? error.message : error)
+    }
+  })()
+})
+window.addEventListener("keydown", (event) => {
+  if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) {
+    return
+  }
+  const target = event.target
+  if (target instanceof HTMLElement) {
+    const tag = target.tagName.toLowerCase()
+    if (tag === "input" || tag === "textarea" || target.isContentEditable) {
+      return
+    }
+  }
+  if (event.key === "p" || event.key === "P") {
+    event.preventDefault()
+    goPrevious()
+  } else if (event.key === "n" || event.key === "N") {
+    event.preventDefault()
+    goNext()
+  } else if (event.key === "f" || event.key === "F") {
+    event.preventDefault()
+    goFirst()
+  } else if (event.key === "l" || event.key === "L") {
+    event.preventDefault()
+    goLast()
+  } else if (event.key === "ArrowLeft") {
+    event.preventDefault()
+    goPrevious()
+  } else if (event.key === "ArrowRight") {
+    event.preventDefault()
+    goNext()
+  } else if (event.key === "Backspace" || event.key === "Delete") {
+    event.preventDefault()
+    deleteFromCursor()
+  }
+})
+
+async function main() {
+  syncFromHash()
+  try {
+    await loadData()
+    resetLineHistory(state.currentLine)
+    render()
+  } catch (error) {
+    elements.status.textContent = "Load failed"
+    elements.hexWorldLink.textContent = String(error instanceof Error ? error.message : error)
+  }
+}
+
+void main()
